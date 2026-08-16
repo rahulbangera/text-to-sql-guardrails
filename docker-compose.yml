@@ -32,7 +32,10 @@ services:
 
     environment:
       DATABASE_URL: postgresql+psycopg://app_user:app_password@db:5432/text2sql
-      API_KEY: ${API_KEY:-local-dev-key}
+      # Unset by default, matching production: the API is open and the built-in
+      # UI at / works without a key. Export API_KEY before `docker compose up`
+      # to turn the gate on.
+      API_KEY: ${API_KEY:-}
 
     ports:
       - "8000:8000"
@@ -51,7 +54,7 @@ services:
 
     environment:
       API_BASE_URL: http://api:8000
-      API_KEY: ${API_KEY:-local-dev-key}
+      API_KEY: ${API_KEY:-}
 
     ports:
       - "8501:8501"

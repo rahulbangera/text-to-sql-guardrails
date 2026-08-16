@@ -5,20 +5,25 @@ from fastapi import Header, HTTPException, status
 
 
 def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
-    """Gate endpoints behind a shared secret.
+    """Optional shared-secret gate, driven entirely by the environment.
 
-    This fails closed. /v1/query runs LLM-generated SQL against a real database
-    and spends LLM quota per call, so an unset API_KEY is treated as a
-    misconfiguration (503) rather than as "auth disabled" — the alternative
-    silently serves an open endpoint the moment the variable goes missing.
+    Set API_KEY and every gated endpoint demands a matching X-API-Key header.
+    Leave it unset and the endpoints are open.
+
+    This is deliberately opt-in rather than fail-closed. A browser cannot hold a
+    secret — anything the server sends to the page is readable in view-source —
+    so a public demo UI and a key-protected API are mutually exclusive. Rather
+    than fake it by shipping the key to the client, the deployment picks one:
+    unset API_KEY for an open demo, set it for a genuinely protected API.
+
+    The database is not what this protects. Read-only enforcement lives in the
+    guardrail and executor layers and applies either way; API_KEY only controls
+    who may spend LLM quota.
     """
     expected = os.environ.get("API_KEY")
 
     if not expected:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="API_KEY is not configured on the server.",
-        )
+        return
 
     # compare_digest rather than == so the comparison doesn't leak the key's
     # length or matching prefix through timing.

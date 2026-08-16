@@ -1,9 +1,12 @@
 import logging
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from db import get_engine
+from rate_limit import enforce_rate_limit
 from security import require_api_key
 from schema_cache import get_schema as get_cached_schema
 from schema_filter import filter_relevant_tables
@@ -28,6 +31,20 @@ class QueryRequest(BaseModel):
     question: str
 
 
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    """Serve the single-page UI from the same origin as the API.
+
+    Same-origin is the point: the browser calls /v1/query directly with no CORS
+    layer, and no API key is ever baked into the served HTML — the page asks the
+    user for one and keeps it in localStorage.
+    """
+    return FileResponse(STATIC_DIR / "index.html")
+
+
 @app.get("/health")
 def health_check():
     """Unauthenticated on purpose — platform health checks can't send a key,
@@ -40,7 +57,10 @@ def get_schema():
     return get_cached_schema(get_engine())
 
 
-@app.post("/v1/query", dependencies=[Depends(require_api_key)])
+@app.post(
+    "/v1/query",
+    dependencies=[Depends(require_api_key), Depends(enforce_rate_limit)],
+)
 def run_query(req: QueryRequest):
     engine = get_engine()
     llm_client = get_llm_client()

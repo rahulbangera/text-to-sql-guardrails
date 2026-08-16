@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text-to-SQL Guardrails</title>
+<style>
+  :root {
+    --bg: #0E1117; --card: #1A1D24; --border: #2A2D34;
+    --fg: #E6E6E6; --muted: #9BA1AC; --accent: #6366F1;
+    --green: #22C55E; --yellow: #EAB308; --red: #EF4444;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .92rem; margin-bottom: 24px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; font-weight: 600; }
+  input[type=text], input[type=password], textarea {
+    width: 100%; background: #0E1117; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 11px 13px; font-size: .95rem; font-family: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 11px 20px; font-size: .92rem; font-weight: 600; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.12); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .tab {
+    padding: 10px 18px; cursor: pointer; color: var(--muted);
+    border-bottom: 2px solid transparent; font-size: .92rem; font-weight: 500;
+  }
+  .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .hidden { display: none !important; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 880px) {
+    .grid, .grid2 { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+  }
+  pre {
+    background: #0B0E14; border: 1px solid var(--border); border-radius: 8px;
+    padding: 13px; overflow-x: auto; font-family: var(--mono);
+    font-size: .84rem; margin: 0; color: #C3E88D; white-space: pre-wrap; word-break: break-word;
+  }
+  .pill {
+    display: inline-block; padding: 6px 16px; border-radius: 999px;
+    font-weight: 700; font-size: .95rem;
+  }
+  .high { background: rgba(34,197,94,.15); color: var(--green); }
+  .medium { background: rgba(234,179,8,.15); color: var(--yellow); }
+  .low { background: rgba(239,68,68,.15); color: var(--red); }
+  .sig { margin-top: 12px; }
+  .sig-top { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted); margin-bottom: 5px; }
+  .bar { height: 6px; background: #0B0E14; border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
+  .tbl-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .87rem; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  td { font-family: var(--mono); font-size: .84rem; }
+  .note { font-size: .84rem; color: var(--muted); margin-top: 10px; }
+  .banner { border-radius: 8px; padding: 13px 15px; font-size: .9rem; margin-bottom: 12px; }
+  .banner.err { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #FCA5A5; }
+  .banner.warn { background: rgba(234,179,8,.1); border: 1px solid rgba(234,179,8,.3); color: #FDE68A; }
+  .banner.ok { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.3); color: #86EFAC; }
+  .banner.info { background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.3); color: #C7D2FE; }
+  .banner ul { margin: 8px 0 0; padding-left: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .stat .k { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 1.5rem; font-weight: 700; margin-top: 3px; }
+  details { border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; margin-bottom: 8px; }
+  summary { cursor: pointer; font-size: .89rem; }
+  .fk { font-family: var(--mono); font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  .spin {
+    display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff; border-radius: 50%; animation: sp .7s linear infinite; vertical-align: -2px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛡️ Text-to-SQL Guardrails</h1>
+  <div class="sub">Natural language → SQL with guardrails, hallucination detection and confidence scoring.</div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="query">💬 Query</div>
+    <div class="tab" data-tab="schema">🗂️ Schema</div>
+    <div class="tab" data-tab="metrics">📊 Metrics</div>
+  </div>
+
+  <!-- QUERY -->
+  <section id="tab-query">
+    <div class="card">
+      <div class="row">
+        <input type="text" id="q" placeholder="e.g. How many orders has each customer placed?">
+        <button id="run">▶ Run</button>
+      </div>
+    </div>
+    <div id="qOut"></div>
+    <div id="histWrap" class="hidden">
+      <h2 style="font-size:1rem;margin:22px 0 10px">📜 Recent queries</h2>
+      <div id="hist"></div>
+    </div>
+  </section>
+
+  <!-- SCHEMA -->
+  <section id="tab-schema" class="hidden">
+    <div class="row" style="margin-bottom:14px">
+      <button class="ghost" id="schemaRefresh">🔄 Refresh</button>
+      <span class="note" style="margin:0">Introspected live from PostgreSQL.</span>
+    </div>
+    <div id="schemaOut"></div>
+  </section>
+
+  <!-- METRICS -->
+  <section id="tab-metrics" class="hidden">
+    <div class="row" style="margin-bottom:14px">
+      <button class="ghost" id="metricsRefresh">🔄 Refresh</button>
+      <span class="note" style="margin:0">Per-instance counters — they reset when the function cold-starts.</span>
+    </div>
+    <div id="metricsOut"></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, txt) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (txt !== undefined) n.textContent = txt;   // textContent, never innerHTML — API data is untrusted
+  return n;
+};
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = body && body.detail ? body.detail : res.statusText;
+    // 401 only happens if API_KEY has been set on the server, which turns the
+    // gate back on. The UI has no key to send, so say so plainly.
+    throw new Error(res.status === 401
+      ? "401 — this deployment has API_KEY set, so the API is key-protected. Unset it for an open demo."
+      : `${res.status} — ${detail}`);
+  }
+  return body;
+}
+
+function banner(kind, text) { return el("div", "banner " + kind, text); }
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach((t) => {
+  t.onclick = () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+    t.classList.add("active");
+    ["query", "schema", "metrics"].forEach((name) =>
+      $("#tab-" + name).classList.toggle("hidden", name !== t.dataset.tab));
+    if (t.dataset.tab === "schema" && !$("#schemaOut").hasChildNodes()) loadSchema();
+    if (t.dataset.tab === "metrics" && !$("#metricsOut").hasChildNodes()) loadMetrics();
+  };
+});
+
+/* ---------- shared table renderer ---------- */
+function tableOf(rows) {
+  const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const wrap = el("div", "tbl-scroll");
+  const table = el("table");
+  const thead = el("thead"), htr = el("tr");
+  cols.forEach((c) => htr.appendChild(el("th", null, c)));
+  thead.appendChild(htr);
+  const tbody = el("tbody");
+  rows.forEach((r) => {
+    const tr = el("tr");
+    cols.forEach((c) => {
+      const v = r[c];
+      tr.appendChild(el("td", null, v === null || v === undefined ? "—" : String(v)));
+    });
+    tbody.appendChild(tr);
+  });
+  table.append(thead, tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+/* ---------- query ---------- */
+const history = [];
+
+function confClass(s) { return s >= 0.7 ? "high" : s >= 0.4 ? "medium" : "low"; }
+function confLabel(s) { return s >= 0.7 ? "High" : s >= 0.4 ? "Medium" : "Low"; }
+
+function renderResult(question, d) {
+  const out = $("#qOut");
+  out.textContent = "";
+
+  if (!d.executed) {
+    const card = el("div", "card");
+    card.appendChild(banner("err",
+      (d.blocked_reason ? "🚫 Blocked by guardrail — " + d.blocked_reason
+                        : "⚠️ Execution failed — " + (d.error || "unknown error"))));
+    if (d.generated_sql) card.appendChild(el("pre", null, d.generated_sql));
+    out.appendChild(card);
+    return;
+  }
+
+  const grid = el("div", "grid");
+
+  // left: SQL + results
+  const left = el("div");
+  const sqlCard = el("div", "card");
+  sqlCard.appendChild(el("h2", null, "Generated SQL"));
+  sqlCard.appendChild(el("pre", null, d.generated_sql || ""));
+  if (d.explanation) sqlCard.appendChild(el("div", "note", "💡 " + d.explanation));
+  left.appendChild(sqlCard);
+
+  const resCard = el("div", "card");
+  resCard.appendChild(el("h2", null, "Results"));
+  const rows = d.rows || [];
+  resCard.appendChild(rows.length
+    ? tableOf(rows)
+    : banner("info", "Query executed successfully but returned zero rows."));
+  resCard.appendChild(el("div", "note",
+    `📄 ${d.row_count ?? 0} rows  •  ⏱ ${(d.execution_time_ms ?? 0).toFixed(1)} ms`));
+  left.appendChild(resCard);
+
+  // right: confidence
+  const right = el("div", "card");
+  const score = d.confidence ?? 0;
+  right.appendChild(el("span", "pill " + confClass(score),
+    `${confLabel(score)} Confidence • ${score.toFixed(2)}`));
+
+  Object.entries(d.confidence_breakdown || {}).forEach(([name, val]) => {
+    const s = el("div", "sig");
+    const top = el("div", "sig-top");
+    top.append(el("span", null, name.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase())),
+               el("span", null, Number(val).toFixed(2)));
+    const bar = el("div", "bar"), fill = el("div");
+    fill.style.width = Math.min(Math.max(Number(val), 0), 1) * 100 + "%";
+    bar.appendChild(fill);
+    s.append(top, bar);
+    right.appendChild(s);
+  });
+
+  if ((d.flagged_issues || []).length) {
+    const b = banner("warn", "Flagged issues");
+    b.style.marginTop = "16px";
+    const ul = el("ul");
+    d.flagged_issues.forEach((i) => ul.appendChild(el("li", null, i)));
+    b.appendChild(ul);
+    right.appendChild(b);
+  }
+
+  if (d.back_translated_question) {
+    right.appendChild(el("div", "note", "🔄 System interpretation: " + d.back_translated_question));
+  }
+
+  grid.append(left, right);
+  out.appendChild(grid);
+}
+
+function renderHistory() {
+  if (!history.length) return;
+  $("#histWrap").classList.remove("hidden");
+  const h = $("#hist");
+  h.textContent = "";
+  history.slice(1, 6).forEach((item) => {
+    const d = el("details");
+    const c = item.result.confidence;
+    d.appendChild(el("summary", null,
+      `${item.question}  •  ${c === undefined || c === null ? "N/A" : c.toFixed(2)}`));
+    d.appendChild(el("pre", null, item.result.generated_sql || ""));
+    h.appendChild(d);
+  });
+}
+
+async function run() {
+  const question = $("#q").value.trim();
+  if (!question) return;
+  const btn = $("#run");
+  btn.disabled = true;
+  btn.textContent = "";
+  btn.append(el("span", "spin"), document.createTextNode(" Running…"));
+  $("#qOut").textContent = "";
+  $("#qOut").appendChild(banner("info",
+    "Generating SQL → validating → executing → checking hallucinations… (first call may take ~30s on a cold start)"));
+  try {
+    const d = await api("/v1/query", { method: "POST", body: JSON.stringify({ question }) });
+    history.unshift({ question, result: d });
+    renderResult(question, d);
+    renderHistory();
+  } catch (e) {
+    $("#qOut").textContent = "";
+    $("#qOut").appendChild(banner("err", "Could not reach API — " + e.message));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "▶ Run";
+  }
+}
+$("#run").onclick = run;
+$("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
+
+/* ---------- schema ---------- */
+async function loadSchema() {
+  const out = $("#schemaOut");
+  out.textContent = "";
+  out.appendChild(banner("info", "Loading schema…"));
+  try {
+    const tables = await api("/schema");
+    out.textContent = "";
+    const grid = el("div", "grid2");
+    tables.forEach((t) => {
+      const c = el("div", "card");
+      c.appendChild(el("h2", null, "📋 " + t.name));
+      c.appendChild(tableOf((t.columns || []).map((col) => ({
+        column: col.name, type: col.type,
+        nullable: col.nullable ? "yes" : "no",
+        pk: col.is_primary_key ? "✓" : "",
+      }))));
+      (t.foreign_keys || []).forEach((fk) => {
+        c.appendChild(el("div", "fk",
+          `🔗 ${t.name}.${fk.column} → ${fk.references_table}.${fk.references_column}`));
+      });
+      grid.appendChild(c);
+    });
+    out.appendChild(grid);
+  } catch (e) {
+    out.textContent = "";
+    out.appendChild(banner("err", "Could not load schema — " + e.message));
+  }
+}
+$("#schemaRefresh").onclick = loadSchema;
+
+/* ---------- metrics ---------- */
+async function loadMetrics() {
+  const out = $("#metricsOut");
+  out.textContent = "";
+  out.appendChild(banner("info", "Loading metrics…"));
+  try {
+    const m = await api("/v1/metrics");
+    out.textContent = "";
+    const pct = (v) => ((v || 0) * 100).toFixed(1) + "%";
+    const stats = el("div", "metrics");
+    [["Total Queries", String(m.total_queries ?? 0)],
+     ["Blocked Queries", String(m.blocked_queries ?? 0)],
+     ["Block Rate", pct(m.block_rate)],
+     ["Avg Confidence", m.avg_confidence == null ? "—" : Number(m.avg_confidence).toFixed(2)],
+    ].forEach(([k, v]) => {
+      const s = el("div", "stat");
+      s.append(el("div", "k", k), el("div", "v", v));
+      stats.appendChild(s);
+    });
+    out.appendChild(stats);
+
+    const extra = el("div", "card");
+    extra.style.marginTop = "16px";
+    extra.appendChild(el("div", "note", "Flagged issue rate: " + pct(m.flagged_issue_rate)));
+    const a = m.avg_confidence;
+    extra.appendChild(
+      a == null ? banner("info", "No successful queries executed yet on this instance.")
+      : a >= 0.7 ? banner("ok", "🟢 System confidence is healthy")
+      : a >= 0.4 ? banner("warn", "🟡 Moderate confidence")
+      : banner("err", "🔴 Low confidence"));
+    if (m.scope === "instance") {
+      extra.appendChild(el("div", "note",
+        "Scope: single instance. Consecutive refreshes may hit different instances and report different numbers."));
+    }
+    out.appendChild(extra);
+  } catch (e) {
+    out.textContent = "";
+    out.appendChild(banner("err", "Could not load metrics — " + e.message));
+  }
+}
+$("#metricsRefresh").onclick = loadMetrics;
+</script>
+</body>
+</html>
