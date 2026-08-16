@@ -6,6 +6,21 @@ import streamlit as st
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://api:8000")
 
+# Every API endpoint except /health is key-gated. On Streamlit Community Cloud
+# this comes from the app's secrets; locally it comes from the environment.
+def _api_key() -> str:
+    if key := os.environ.get("API_KEY"):
+        return key
+    try:
+        return st.secrets.get("API_KEY", "")
+    except Exception:
+        # st.secrets raises rather than returning empty when no secrets file
+        # exists at all, which is the normal case for a plain local run.
+        return ""
+
+
+AUTH_HEADERS = {"X-API-Key": _api_key()}
+
 st.set_page_config(
     page_title="Text-to-SQL Guardrails",
     page_icon="🛡️",
@@ -110,7 +125,8 @@ with tab_query:
                 response = requests.post(
                     f"{API_BASE_URL}/v1/query",
                     json={"question": question},
-                    timeout=60,
+                    headers=AUTH_HEADERS,
+                    timeout=120,
                 )
                 result = response.json()
             except requests.RequestException as e:
@@ -198,7 +214,7 @@ with tab_schema:
         st.rerun()
 
     try:
-        response = requests.get(f"{API_BASE_URL}/schema", timeout=10)
+        response = requests.get(f"{API_BASE_URL}/schema", headers=AUTH_HEADERS, timeout=30)
         tables = response.json()
 
         cols = st.columns(2)
@@ -233,7 +249,7 @@ with tab_metrics:
         st.rerun()
 
     try:
-        response = requests.get(f"{API_BASE_URL}/v1/metrics", timeout=10)
+        response = requests.get(f"{API_BASE_URL}/v1/metrics", headers=AUTH_HEADERS, timeout=30)
         metrics = response.json()
 
         c1, c2, c3, c4 = st.columns(4)

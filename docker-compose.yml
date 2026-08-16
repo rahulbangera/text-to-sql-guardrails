@@ -32,6 +32,7 @@ services:
 
     environment:
       DATABASE_URL: postgresql+psycopg://app_user:app_password@db:5432/text2sql
+      API_KEY: ${API_KEY:-local-dev-key}
 
     ports:
       - "8000:8000"
@@ -50,6 +51,7 @@ services:
 
     environment:
       API_BASE_URL: http://api:8000
+      API_KEY: ${API_KEY:-local-dev-key}
 
     ports:
       - "8501:8501"

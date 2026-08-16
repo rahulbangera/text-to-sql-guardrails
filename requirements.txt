@@ -1,1 +1,3 @@
--r app/requirements.txt
+# Local development entry point. Vercel installs app/requirements.txt (runtime
+# only) from its configured root directory and never reads this file.
+-r app/requirements-dev.txt

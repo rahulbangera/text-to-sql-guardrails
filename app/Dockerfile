@@ -1,12 +1,12 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /code
 
-COPY requirements.txt .
+COPY requirements.txt requirements-dev.txt ./
 
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
-RUN pip install --no-cache-dir -r requirements.txt
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# No torch, and no model download step — the ONNX weights are committed to the
+# repo and arrive via the COPY below, so builds are offline and reproducible.
+RUN pip install --no-cache-dir -r requirements-dev.txt
 
 COPY . .
 

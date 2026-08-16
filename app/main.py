@@ -1,10 +1,11 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
-from db import engine
-from schema_introspection import introspect_schema
+from db import get_engine
+from security import require_api_key
+from schema_cache import get_schema as get_cached_schema
 from schema_filter import filter_relevant_tables
 from prompt_constructor import build_prompt
 from llm_client import get_llm_client
@@ -21,7 +22,6 @@ configure_logging()
 logger = logging.getLogger("api")
 
 app = FastAPI(title="Text-to-SQL Guardrails API")
-llm_client = get_llm_client()
 
 
 class QueryRequest(BaseModel):
@@ -30,17 +30,22 @@ class QueryRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
+    """Unauthenticated on purpose — platform health checks can't send a key,
+    and this touches neither the database nor the LLM."""
     return {"status": "ok"}
 
 
-@app.get("/schema")
+@app.get("/schema", dependencies=[Depends(require_api_key)])
 def get_schema():
-    return introspect_schema(engine)
+    return get_cached_schema(get_engine())
 
 
-@app.post("/v1/query")
+@app.post("/v1/query", dependencies=[Depends(require_api_key)])
 def run_query(req: QueryRequest):
-    tables = introspect_schema(engine)
+    engine = get_engine()
+    llm_client = get_llm_client()
+
+    tables = get_cached_schema(engine)
     relevant_tables = filter_relevant_tables(req.question, tables)
     expected_table_names = [t.table.name for t in relevant_tables]
     prompt = build_prompt(req.question, relevant_tables)
@@ -172,6 +177,10 @@ def run_query(req: QueryRequest):
     }
 
 
-@app.get("/v1/metrics")
+@app.get("/v1/metrics", dependencies=[Depends(require_api_key)])
 def get_metrics():
-    return metrics_store.summary()
+    # These counters live in this instance's memory. On a serverless platform
+    # that means they cover one instance's lifetime, not the deployment — two
+    # consecutive calls can hit different instances and report different
+    # numbers. Persist to a table if you need real aggregates.
+    return {**metrics_store.summary(), "scope": "instance"}

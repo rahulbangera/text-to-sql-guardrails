@@ -1,0 +1,8 @@
+# Local development and CI only. Vercel installs requirements.txt, so nothing
+# here ships to production — keeping the server and its test tooling separate
+# is what keeps the deployed bundle small.
+-r requirements.txt
+
+uvicorn[standard]==0.32.0
+python-dotenv==1.0.1
+pytest==8.4.1

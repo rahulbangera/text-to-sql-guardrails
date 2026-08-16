@@ -18,3 +18,6 @@ venv/
 
 # macOS
 .DS_Store
+# ONNX model weights are committed on purpose — Vercel's Python runtime has no
+# build hook to fetch them, so they must be in the bundle.
+!app/models/**

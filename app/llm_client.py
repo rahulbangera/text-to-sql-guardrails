@@ -1,6 +1,7 @@
 import json
 import os
 from abc import ABC, abstractmethod
+from functools import lru_cache
 
 from groq import Groq
 from pydantic import BaseModel, Field
@@ -27,7 +28,14 @@ class LLMClient(ABC):
 
 class GroqLLMClient(LLMClient):
     def __init__(self, model: str = "openai/gpt-oss-20b"):
-        self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
+        api_key = os.environ.get("GROQ_API_KEY")
+
+        if not api_key:
+            raise RuntimeError(
+                "GROQ_API_KEY is not set. Create a key at https://console.groq.com/keys"
+            )
+
+        self.client = Groq(api_key=api_key)
         self.model = model
 
     def _structured_call(self, prompt: str, schema_model: type[BaseModel]):
@@ -58,5 +66,8 @@ class GroqLLMClient(LLMClient):
         return self._structured_call(prompt, BackTranslationResult)
 
 
+@lru_cache(maxsize=1)
 def get_llm_client() -> LLMClient:
+    """Cached so each request reuses one client — and so a missing API key
+    raises inside a request handler rather than at import time."""
     return GroqLLMClient()
